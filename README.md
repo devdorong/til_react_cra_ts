@@ -12,6 +12,11 @@
 ## 2. 파일정리
 
 - 불필요한 파일 정리
+  - 삭제목록
+    - src/App.test.tsx
+    - src/logo.svg
+    - src/reportWebVitals.ts
+    - src/setupTests.ts
 
 ## 3. intex.tsx 살펴보기
 
