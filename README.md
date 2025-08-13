@@ -1,381 +1,428 @@
-# useState
+# Context API
 
-- 리액트용 변수이다. (수업편의)
-- set으로 값을 변화시키면 리랜더링을 한다.
+## 1. 목적
 
-## 0. `@`으로 절대경로 설정하기
+- props 로 전달하는 state 를 줄여보자.
+- 어떤 컴포넌트든 자유롭게 접근하는 전역 state 를 생성하자.
+- todos 를 관리하는 것은 일반적으로 적당하지 않음.
+- 회원정보, 장바구니, 테마 등이 적당한 것으로 판단.
 
-- tsconfig.json
+## 2. 단계별 실습
 
-```json
-"baseUrl": "src", // 프로젝트의 기본 경로
-"paths": {
-  "@/*": ["*"], // @/ 로 src 폴더 전체를 참조
-  "@types/*": ["types/*"] // @types 로 src/types 참조
-},
-```
+### 2.1. Context 와 useReduce 조합
 
-## 1. 기본예제
-
-- /src/components 폴더 생성
-- Counter.tsx 파일 생성
+- 폴더 구조 : `/src/context` 폴더 생성
+- 파일 구조 : `/src/context/TodoContext.tsx` 파일 생성
+- 1차 버전
 
 ```tsx
-import { useState } from 'react';
+import { TodoType } from '@/types/todoType';
+import { createContext, useReducer } from 'react';
 
-// 2번 이상 반복되고, 가독성이 떨어집니다.
-// 1. type 으로 정의해 보자.
-type VoidFunction = () => void;
-type JSXElement = () => JSX.Element;
-
-// 2. interface 로 정의해 보자.
-interface IVoidFunction {
-  (): void;
-}
-interface IJSXElement {
-  (): JSX.Element;
-}
-
-const Counter: IJSXElement | JSXElement = () => {
-  // ts 자리
-  const [count, setCount] = useState<number>(0);
-  const handleAdd: IVoidFunction | VoidFunction = () => {
-    setCount(count + 1);
-  };
-  const handleMinus: IVoidFunction | VoidFunction = () => {
-    setCount(count - 1);
-  };
-  const handleReset: IVoidFunction | VoidFunction = () => {
-    setCount(0);
-  };
-  const handleMulti: IVoidFunction | VoidFunction = () => {
-    setCount(count * 2);
-  };
-  const handleSquare: IVoidFunction | VoidFunction = () => {
-    setCount(count * count);
-  };
-
-  // tsx 자리
-  return (
-    <div>
-      <h1>Counter : {count}</h1>
-      <button onClick={handleAdd}>증가</button>
-      <button onClick={handleMinus}>감소</button>
-      <button onClick={handleReset}>초기화</button>
-      <button onClick={handleMulti}>2배</button>
-      <button onClick={handleSquare}>제곱</button>
-    </div>
-  );
+// 전역 state 에서 관리할 데이터 모양
+type TodoState = {
+  todos: TodoType[];
 };
 
-export default Counter;
-```
-
-## 2. 실습 예제
-
-### 2.1. 실습 예제 1
-
-- /src/components/NameEditor.tsx
-
-```tsx
-import { ChangeEvent, MouseEvent, useState } from 'react';
-
-// 1. 타입 정의
-type JSXElement = () => JSX.Element;
-type ChangeEventInput = (e: ChangeEvent<HTMLInputElement>) => void;
-type ClickEventButton = (e: MouseEvent<HTMLButtonElement>) => void;
-type NameType = string;
-
-// 2. 인터페이스 정의
-interface IJSXElement {
-  (): JSX.Element;
-}
-
-interface IChangeEventInput {
-  (e: ChangeEvent<HTMLInputElement>): void;
-}
-interface IClickEventButton {
-  (e: MouseEvent<HTMLButtonElement>): void;
-}
-const NameEditor: JSXElement | IJSXElement = (): JSX.Element => {
-  //ts
-  const [name, setName] = useState<NameType>('');
-  const handleName: ChangeEventInput | IChangeEventInput = (e): void => {
-    setName(e.target.value);
-  };
-  const handleClick: ClickEventButton | IClickEventButton = (e): void => {
-    console.log(name);
-    setName('');
-  };
-  //tsx
-  return (
-    <div>
-      <h2>NameEditor : {name}</h2>
-      <div>
-        <input
-          type="text"
-          value={name}
-          onChange={e => handleName(e)}
-          placeholder="변경될 이름을 입력해주세요"
-        />
-        <button onClick={e => handleClick(e)}>확인</button>
-      </div>
-    </div>
-  );
+// 1. 초기값
+const initialState: TodoState = {
+  todos: [],
 };
 
-export default NameEditor;
-```
+// 2. Reducer 함수 : action 으로  state 를 관리하는 함수
+// - 매개변수로 state 와  action 이 전달됨
+// - action 의 모양 {type:string, payload: {id:"", title:"", complted:false}}
+// - action 의 모양 {type:string, payload: TodoType} 위와 같다.
 
-### 2.2. 실습 예제 2
+// type AddAction = { type: string; payload: TodoType };
+// type AddAction = {
+//   type: 'ADD' | 'TOGGLE' | 'DELETE' | 'EDIT';
+//   payload: TodoType | { id: string } | { id: string; title: string };
+// };
+type AddAction = { type: 'ADD'; payload: TodoType };
+type toggleAction = { type: 'TOGGLE'; payload: { id: string } };
+type deleteAction = { type: 'DELETE'; payload: { id: string } };
+type editAction = { type: 'EDIT'; payload: { id: string; title: string } };
+type todoAction = AddAction | toggleAction | deleteAction | editAction;
 
-- /src/components/ToggleSwitch.tsx
-
-```tsx
-import { useState } from 'react';
-// 1. type
-type JSXElement = () => JSX.Element;
-type ClickType = () => void;
-type ToggleType = boolean;
-
-// 2. interface
-interface IJSXElement {
-  (): JSX.Element;
+function todosReducer(state: TodoState, action: todoAction): TodoState {
+  switch (action.type) {
+    case 'ADD':
+      // {type:'ADD', payload: {id:"날짜", title:"안녕", complted:false}}
+      const todo = action.payload;
+      return { ...state, todos: [todo, ...state.todos] };
+    case 'TOGGLE': {
+      //  { id: string }
+      //   const id = action.payload.id;
+      const { id } = action.payload;
+      const arr: TodoType[] = state.todos.map(todo =>
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo,
+      );
+      return { ...state, todos: arr };
+    }
+    case 'DELETE': {
+      //  { id: string }
+      //   const id = action.payload.id;
+      const { id } = action.payload;
+      const arr: TodoType[] = state.todos.filter(todo => todo.id !== id);
+      return { ...state, todos: arr };
+    }
+    case 'EDIT': {
+      // { id: string; title: string }
+      const { id, title } = action.payload;
+      const arr: TodoType[] = state.todos.map(todo => (todo.id === id ? { ...todo, title } : todo));
+      return { ...state, todos: arr };
+    }
+    default:
+      return state;
+  }
 }
-interface IClickType {
-  (): void;
-}
-
-const ToggleSwitch: JSXElement | IJSXElement = () => {
-  // ts
-  const [isOn, setIsOn] = useState<ToggleType>(false);
-
-  const handleClick: ClickType | IClickType = () => {
-    setIsOn(!isOn);
+// 3. Context 생성
+//- Context 에서 관리할 Value 타입
+type TodoContextValue = {
+  todos: TodoType[];
+  addTodo: (todo: TodoType) => void;
+  toggleTodo: (id: string) => void;
+  deleteTodo: (id: string) => void;
+  editTodo: (id: string, title: string) => void;
+};
+const TodoContext = createContext<TodoContextValue | null>(null);
+// 4. Provide 생성
+const TodoProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  // 5. useReduce 로 state 관리하기
+  //   const [state, dispatch] = useReducer(리듀서함수, 초기값)
+  const [state, dispatch] = useReducer(todosReducer, initialState);
+  // dispatch 전용 함수
+  const addTodo = (todo: TodoType) => {
+    dispatch({ type: 'ADD', payload: todo });
+  };
+  const toggleTodo = (id: string) => {
+    dispatch({ type: 'TOGGLE', payload: { id } });
+  };
+  const deleteTodo = (id: string) => {
+    dispatch({ type: 'DELETE', payload: { id } });
+  };
+  const editTodo = (id: string, title: string) => {
+    dispatch({ type: 'EDIT', payload: { id, title } });
+  };
+  // Context 의  value 는 현재 {} 로 정의되어 있다.
+  const value: TodoContextValue = {
+    todos: state.todos,
+    addTodo,
+    toggleTodo,
+    deleteTodo,
+    editTodo,
   };
 
-  // tsx
-  return (
-    <div>
-      <h2>ToggleSwitch : {isOn ? '밝아요' : '어두워요'}</h2>
-      <div>
-        <button onClick={handleClick}>토글</button>
-      </div>
-    </div>
-  );
+  return <TodoContext.Provider value={value}>{children}</TodoContext.Provider>;
+};
+```
+
+### 2.2. useCallback 으로 함수를 리랜더링에서 제외하기
+
+```tsx
+// dispatch 전용 함수
+const addTodo = useCallback((todo: TodoType) => {
+  dispatch({ type: 'ADD', payload: todo });
+}, []);
+const toggleTodo = useCallback((id: string) => {
+  dispatch({ type: 'TOGGLE', payload: { id } });
+}, []);
+const deleteTodo = useCallback((id: string) => {
+  dispatch({ type: 'DELETE', payload: { id } });
+}, []);
+const editTodo = useCallback((id: string, title: string) => {
+  dispatch({ type: 'EDIT', payload: { id, title } });
+}, []);
+```
+
+### 2.3. useMemo 로 state를 리랜더링에서 필요한 경우만 업데이트하기
+
+```tsx
+const value = useMemo(
+  () => ({
+    todos: state.todos,
+    addTodo,
+    toggleTodo,
+    deleteTodo,
+    editTodo,
+  }),
+  [state.todos, addTodo, toggleTodo, deleteTodo, editTodo],
+);
+```
+
+### 2.4. 커스텀 훅으로 활용하기
+
+```tsx
+// 커스텀훅
+export function useTodos() {
+  const ctx = useContext(TodoContext);
+  return ctx;
+}
+```
+
+### 2.5. 완료 코드
+
+```tsx
+import { TodoType } from '@/types/todoType';
+import { createContext, useCallback, useContext, useMemo, useReducer } from 'react';
+
+type TodoState = {
+  todos: TodoType[];
+};
+const initialState: TodoState = {
+  todos: [],
 };
 
-export default ToggleSwitch;
-```
+// 2. Reducer 함수 : action 으로  state 를 관리하는 함수
+type AddAction = { type: 'ADD'; payload: TodoType };
+type toggleAction = { type: 'TOGGLE'; payload: { id: string } };
+type deleteAction = { type: 'DELETE'; payload: { id: string } };
+type editAction = { type: 'EDIT'; payload: { id: string; title: string } };
+type todoAction = AddAction | toggleAction | deleteAction | editAction;
 
-### 2.3. 실습 예제 3
-
-- /src/components/User.tsx
-
-```tsx
-import { ChangeEvent, useState } from 'react';
-// 1. type 정의
-type UserType = { age: number; name: string };
-type AddType = () => void;
-type MinusType = () => void;
-type EditType = (e: ChangeEvent<HTMLInputElement>) => void;
-type ClickType = () => void;
-
-// 2. interface 정의
-interface IUserType {
-  age: number;
-  name: string;
+function todosReducer(state: TodoState, action: todoAction): TodoState {
+  switch (action.type) {
+    case 'ADD':
+      // {type:'ADD', payload: {id:"날짜", title:"안녕", complted:false}}
+      const todo = action.payload;
+      return { ...state, todos: [todo, ...state.todos] };
+    case 'TOGGLE': {
+      //  { id: string }
+      //   const id = action.payload.id;
+      const { id } = action.payload;
+      const arr: TodoType[] = state.todos.map(todo =>
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo,
+      );
+      return { ...state, todos: arr };
+    }
+    case 'DELETE': {
+      //  { id: string }
+      //   const id = action.payload.id;
+      const { id } = action.payload;
+      const arr: TodoType[] = state.todos.filter(todo => todo.id !== id);
+      return { ...state, todos: arr };
+    }
+    case 'EDIT': {
+      // { id: string; title: string }
+      const { id, title } = action.payload;
+      const arr: TodoType[] = state.todos.map(todo => (todo.id === id ? { ...todo, title } : todo));
+      return { ...state, todos: arr };
+    }
+    default:
+      return state;
+  }
 }
-interface IAddType {
-  (): void;
-}
-interface IMinusType {
-  (): void;
-}
-interface IEditType {
-  (e: ChangeEvent<HTMLInputElement>): void;
-}
-interface IClickType {
-  (): void;
-}
-
-const User = () => {
-  //ts
-  const [user, setUser] = useState<UserType | IUserType>({ name: '아이유', age: 20 });
-  const handleAdd: AddType | IAddType = () => {
-    setUser({ ...user, age: user.age + 1 });
-  };
-  const handleMinus: MinusType | IMinusType = () => {
-    setUser({ ...user, age: user.age - 1 });
-  };
-  const handleEdit: EditType | IEditType = e => {
-    setUser({ ...user, name: e.target.value });
-  };
-  const handleClick: ClickType | IClickType = () => {
-    console.log(user.name);
-  };
-  //tsx
-  return (
-    <div>
-      <h2>
-        User : {user.name}님 나이는 {user.age} 입니다.{' '}
-      </h2>
-      <div>
-        <button onClick={handleAdd}>나이 증가</button>
-        <button onClick={handleMinus}>나이 감소</button>
-      </div>
-      <div>
-        <input type="text" placeholder="변경할 이름" onChange={e => handleEdit(e)} />
-        <button onClick={handleClick}>수정</button>
-      </div>
-    </div>
-  );
+// 3. Context 생성
+//- Context 에서 관리할 Value 타입
+type TodoContextValue = {
+  todos: TodoType[];
+  addTodo: (todo: TodoType) => void;
+  toggleTodo: (id: string) => void;
+  deleteTodo: (id: string) => void;
+  editTodo: (id: string, title: string) => void;
 };
+const TodoContext = createContext<TodoContextValue | null>(null);
 
-export default User;
+// 4. Provide 생성
+// export const TodoProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+export const TodoProvider = ({ children }: React.PropsWithChildren): JSX.Element => {
+  // 5. useReduce 로 state 관리하기
+  //   const [state, dispatch] = useReducer(리듀서함수, 초기값)
+  const [state, dispatch] = useReducer(todosReducer, initialState);
+
+  // dispatch 전용 함수
+  const addTodo = useCallback((todo: TodoType) => {
+    dispatch({ type: 'ADD', payload: todo });
+  }, []);
+  const toggleTodo = useCallback((id: string) => {
+    dispatch({ type: 'TOGGLE', payload: { id } });
+  }, []);
+  const deleteTodo = useCallback((id: string) => {
+    dispatch({ type: 'DELETE', payload: { id } });
+  }, []);
+  const editTodo = useCallback((id: string, title: string) => {
+    dispatch({ type: 'EDIT', payload: { id, title } });
+  }, []);
+
+  // Context 의  value 는 현재 {} 로 정의되어 있다.
+  const value = useMemo(
+    () => ({
+      todos: state.todos,
+      addTodo,
+      toggleTodo,
+      deleteTodo,
+      editTodo,
+    }),
+    [state.todos, addTodo, toggleTodo, deleteTodo, editTodo],
+  );
+
+  return <TodoContext.Provider value={value}>{children}</TodoContext.Provider>;
+};
+// 커스텀훅
+export function useTodos() {
+  const ctx = useContext(TodoContext);
+  return ctx;
+}
 ```
 
-## 2.4. 실습 예제 4. (useState 버전 Todo)
+## 3. 활용 실습
 
-- 타입 정의를 위한 폴더 : /src/types 폴더 생성
-  - todoType.ts 파일 생성
-
-- 글쓰기 : /src/todos/TodoWirte.tsx
-  - 입력창, 등록버튼
-
-- 글목록 : /src/todos/TodoList.tsx
-
-- 글한개의 아이템 : /src/todos/TodoItem.tsx
-  - 아이디, 제목, 완료여부, 수정버튼, 삭제버튼
-  - 상태 2가지 : 목록상태, 편집상태
-
-- /src/App.tsx
+- App.tsx
 
 ```tsx
-import { useState } from 'react';
 import TodoList from './components/todos/TodoList';
-import TodoWirte from './components/todos/TodoWirte';
-
-// 공통으로 사용하는 type 정의 및 interface 는 별도의 폴더에 보관하자.
-import { ITodoType, TodoType } from './types/todoType';
-
-// 테스트를 위한 목업 데이터 (/src/api/dummy.ts 추천)
-const initialTodos: TodoType[] = [];
+import TodoWrite from './components/todos/TodoWrite';
+import { TodoProvider } from './context/TodoContext';
 
 function App(): JSX.Element {
-  // ts
-  // {id: "", title: "", completed:false}
-  const [todos, setTodos] = useState<(ITodoType | TodoType)[]>(initialTodos);
-  // todos 를 업데이트 하는 함수
-  const handleTodoUpdate = (newTodo: TodoType): void => {
-    // setTodos(prev => [newTodo, ...prev]);
-    const arr: TodoType[] = [newTodo, ...todos];
-    setTodos(arr);
-  };
-  // // todo 목록에서 실행할 함수들
-  // const onToggle = (id: number): void => {
-  //   console.log('onToggle : ', id);
-  //   // 전달 받은 ID 를 이용해서 map 으로 찾아서 id 가 같으면 completed 변경
-  //   const arr: TodoType[] = todos.map(todo =>
-  //     todo.id === id ? { ...todo, completed: !todo.completed } : todo,
-  //   );
-  //   setTodos(arr);
-  // };
-  // todo 목록에서 실행할 함수들
-  const onToggle = (id: number): void => {
-    // console.log('onToggle :', id);
-    // 전달 받은 ID 를 이용해서 찾아서 complete 변경
-    const arr: TodoType[] = todos.map(item => {
-      if (item.id === id) {
-        return { ...item, completed: !item.completed };
-      } else {
-        return item;
-      }
-    });
-    //   item.id === id ? { ...item, completed: !item.completed } : item,
-    // );
-    setTodos(arr);
-  };
-  const onDelete = (id: number): void => {
-    // console.log('onDelete :', id);
-    // 전달 받은 ID 를 제외한 나머지 즉, amp 으로 새 목록(배열)으로 변경
-    const arr: TodoType[] = todos.filter(todo => todo.id !== id);
-    setTodos(arr);
-  };
-  const onEdit = (id: number, newTitle: string): void => {
-    // console.log('onEdit id', id);
-    // console.log('onEdit newTitle', newTitle);
-    // 아이디와 새로운 타이틀을 알 수 있다.
-    // 아이디를 이용해서 해당 타이틀을 ㅅ정하고, 업데이트 해보자.
-    const arr: TodoType[] = todos.map(item => {
-      if (item.id === id) {
-        return { ...item, title: newTitle };
-      } else {
-        return item;
-      }
-    });
-    setTodos(arr);
-  };
-  //tsx
+  // tsx 자리
   return (
-    <div>
-      <h1>할일 앱서비스</h1>
+    <TodoProvider>
       <div>
-        <TodoWirte setTodos={setTodos} handleTodoUpdate={handleTodoUpdate} />
-        <TodoList todos={todos} onToggle={onToggle} onDelete={onDelete} onEdit={onEdit} />
+        <h1>할일 앱서비스</h1>
+        <div>
+          <TodoWrite />
+          <TodoList />
+        </div>
       </div>
-    </div>
+    </TodoProvider>
   );
 }
 
 export default App;
 ```
 
-- /src/components/todos/TodoItem.tsx
+- TodoWrite.tsx
 
 ```tsx
+import { ChangeEvent, KeyboardEvent, useState } from 'react';
+import { TodoType } from '../../types/todoType';
+import { useTodos } from '../../context/TodoContext';
+
+const TodoWrite = () => {
+  // js 자리
+  const { addTodo } = useTodos();
+  // 할일 제목 값 관리
+  const [title, setTitle] = useState<string>('');
+  // title 변경시 onChange 이벤트 처리해보기
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setTitle(e.target.value);
+  };
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // enter 키를 입력시 처리
+    if (e.key === 'Enter') {
+      handleAdd();
+    }
+  };
+
+  // 새 할일 등록하기
+  const handleAdd = () => {
+    if (title.trim()) {
+      const newTodo: TodoType = {
+        id: Date.now().toString(),
+        title: title,
+        completed: false,
+      };
+      addTodo(newTodo);
+      setTitle('');
+    }
+  };
+  // jsx 자리
+  return (
+    <div>
+      <input type="text" value={title} onChange={e => handleChange(e)} onKeyDown={handleKeyDown} />
+      <button onClick={handleAdd}>등록</button>
+    </div>
+  );
+};
+
+export default TodoWrite;
+```
+
+- TodoList.tsx
+
+```tsx
+import { useTodos } from '../../context/TodoContext';
+import TodoItem from './TodoItem';
+
+const TodoList = (): JSX.Element => {
+  const { todos } = useTodos();
+  return (
+    <div>
+      <h2>할일목록</h2>
+      {todos.length === 0 ? (
+        <p>목록이 없습니다.</p>
+      ) : (
+        <ul>
+          {todos.map(item => (
+            <TodoItem key={item.id} todo={item} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+export default TodoList;
+```
+
+- TodoItem.tsx
+
+```tsx
+import { useTodos } from '../../context/TodoContext';
 import { TodoType } from '@/types/todoType';
-import { useState } from 'react';
+import React, { KeyboardEvent, useState } from 'react';
 
 type TodoItemProps = {
   todo: TodoType;
-  onToggle: (id: number) => void;
-  onDelete: (id: number) => void;
-  onEdit: (id: number, newTitle: string) => void;
 };
-const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
-  // ts
 
-  // 현재 Edit 상태인지 아닌지 파악
+const TodoItem = ({ todo }: TodoItemProps) => {
+  // js 자리
+  const { toggleTodo, deleteTodo, editTodo } = useTodos();
+
+  // 현재 Edit 상태인지 아닌지 관리
   const [isEdit, setIsEdit] = useState<boolean>(false);
   // Edit 상태라면 입력중인 title 내용 관리
   const [editTitle, setEditTitle] = useState<string>(todo.title);
 
   // 수정은 별도의 입력창 구성으로 수정 후 값 만 업데이트
   const handleEdit = () => {
-    console.log('여기에서 내용을 수정하는 기능 작성후 완료된 데이터 전송');
+    // console.log('여기에서 내용을 수정하는 기능 작성 후 완료된 데이터 전송');
     // isEdit 을 true 로 변경
     setIsEdit(true);
   };
+
+  const hanldeKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    //console.log(e.key);
+    if (e.key === 'Enter') {
+      handleEditSave();
+    }
+    if (e.key === 'Escape') {
+      handleEditCancel();
+    }
+  };
   // 수정 후 저장 기능
   const handleEditSave = () => {
-    console.log('수정완료진행');
-    // 업데이트 해줌.(진행예정)
+    // console.log('수정완료 저장');
+    // 1. 업데이트 해줌. (진행예정)
     if (editTitle.trim()) {
-      // 변경되어야 할 id, 새로운 타이틀 전달
-      onEdit(todo.id, editTitle);
-      // 상태는 isEdit 을 false로 변경
+      // 변경되어야 할 iD, 새로운 타이틀 전달
+      editTodo(todo.id, editTitle);
+      // 2. 상태는 isEdit 을 false 로 변경
       setIsEdit(false);
     }
   };
-  // 수정중인 내용 취소 기능
+  // 수정 취소 기능
   const handleEditCancel = () => {
     // 1. editTitle 을 원래대로 돌리고
-    // 상태 false 로 변경
+    setEditTitle(todo.title);
+    // 2. isEdit 을 false 로 설정하고
     setIsEdit(false);
   };
 
-  // CSS 객체 만들기 (React.CSSProperties 타입을 명시하면 코드힌트시 스타일 체크 편하다)
+  // CSS 객체 만들기
   const liStyle: React.CSSProperties = {
     display: 'flex',
     gap: '10px',
@@ -384,17 +431,7 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
     color: todo.completed ? 'gray' : 'red',
     textDecoration: todo.completed ? 'line-through' : 'none',
   };
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // console.log(e.key) : 입력중인 키 알아내기
-    if (e.key === 'Enter') {
-      handleEditSave();
-    }
-    if (e.key === 'Escape') {
-      handleEditCancel();
-    }
-  };
 
-  // tsx
   return (
     <li style={liStyle}>
       {isEdit ? (
@@ -403,17 +440,17 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
             type="text"
             value={editTitle}
             onChange={e => setEditTitle(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onKeyDown={hanldeKeyDown}
           />
           <button onClick={handleEditSave}>저장</button>
           <button onClick={handleEditCancel}>취소</button>
         </>
       ) : (
         <>
-          <input type="checkbox" onChange={() => onToggle(todo.id)} checked={todo.completed} />
+          <input type="checkbox" onChange={() => toggleTodo(todo.id)} checked={todo.completed} />
           <span>{todo.title}</span>
           <button onClick={handleEdit}>수정</button>
-          <button onClick={() => onDelete(todo.id)}>삭제</button>
+          <button onClick={() => deleteTodo(todo.id)}>삭제</button>
         </>
       )}
     </li>
@@ -423,103 +460,229 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
 export default TodoItem;
 ```
 
-- /src/components/todos/TodoList.tsx
+## 4. 실제 프로젝트 구성
 
-```tsx
-import { TodoType } from '../../types/todoType';
-import TodoItem from './TodoItem';
+- /src/context/todo 폴더 생성
 
-interface TodoListProps {
+### 4.1. Context 공통 사용 타입 정의
+
+- /src/context/todo/`types.ts` 생성
+
+```ts
+import { TodoType } from '@/types/todoType';
+
+// state 타입
+export type TodoState = {
   todos: TodoType[];
-  onToggle: (id: number) => void;
-  onDelete: (id: number) => void;
-  onEdit: (id: number, newTitle: string) => void;
-}
-
-const TodoList = ({ todos, onToggle, onDelete, onEdit }: TodoListProps): JSX.Element => {
-  //ts
-
-  //tsx
-  return (
-    <div>
-      <h2>할일 목록</h2>
-      {/* 할일 즉 todos 는 여러개의 item 으로 구성된 배열이다. map 으로 출력 */}
-      {todos.length === 0 ? (
-        <p>목록이 없습니다.</p>
-      ) : (
-        <ul>
-          {todos.map(item => (
-            <TodoItem
-              key={item.id}
-              todo={item}
-              onToggle={onToggle}
-              onDelete={onDelete}
-              onEdit={onEdit}
-            />
-          ))}
-        </ul>
-      )}
-
-      {/* <TodoItem onToggle={onToggle} onDelete={onDelete} onEdit={onEdit} /> */}
-    </div>
-  );
 };
 
-export default TodoList;
+// action 타입
+export type AddAction = { type: 'ADD'; payload: TodoType };
+export type toggleAction = { type: 'TOGGLE'; payload: { id: string } };
+export type deleteAction = { type: 'DELETE'; payload: { id: string } };
+export type editAction = { type: 'EDIT'; payload: { id: string; title: string } };
+export type todoAction = AddAction | toggleAction | deleteAction | editAction;
+
+// 초기상태값
+export const initialState: TodoState = {
+  todos: [],
+};
 ```
 
-- /src/components/todos/TodoWrite.tsx
+### 4.2. 액션 분리
+
+- /src/context/todo/`actions.ts` 생성
+
+```ts
+import { TodoType } from '@/types/todoType';
+import { AddAction, DeleteAction, EditAction, ToggleAction } from './types';
+
+export const addTodo = (todo: TodoType): AddAction => ({ type: 'ADD', payload: todo });
+export const toggleTodo = (id: number): ToggleAction => ({ type: 'TOGGLE', payload: { id } });
+export const deleteTodo = (id: number): DeleteAction => ({ type: 'DELETE', payload: { id } });
+export const editTodo = (id: number, title: string): EditAction => ({
+  type: 'EDIT',
+  payload: { id, title },
+});
+```
+
+### 4.3. 리듀서 분리
+
+- /src/context/todo/`reducer.ts` 파일 생성
+
+```ts
+import { TodoType } from '@/types/todoType';
+import { TodoAction, TodoState } from './types';
+
+export function todosReducer(state: TodoState, action: TodoAction): TodoState {
+  switch (action.type) {
+    case 'ADD': {
+      const todo: TodoType = action.payload;
+      return { ...state, todos: [todo, ...state.todos] };
+    }
+    case 'TOGGLE': {
+      const { id } = action.payload;
+      const arr: TodoType[] = state.todos.map(todo =>
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo,
+      );
+      return { ...state, todos: arr };
+    }
+    case 'DELETE': {
+      const { id } = action.payload;
+      const arr: TodoType[] = state.todos.filter(todo => todo.id !== id);
+      return { ...state, todos: arr };
+    }
+    case 'EDIT': {
+      const { id, title } = action.payload;
+      const arr: TodoType[] = state.todos.map(todo => (todo.id === id ? { ...todo, title } : todo));
+      return { ...state, todos: arr };
+    }
+    default:
+      return state;
+  }
+}
+```
+
+### 4.4. Provider 분리
+
+- /src/context/todo/TodoProvider.tsx
 
 ```tsx
-import { useState } from 'react';
-import { TodoType } from '../../types/todoType';
+import { TodoType } from '@/types/todoType';
+import { createContext, useCallback, useMemo, useReducer } from 'react';
+import { todosReducer } from './reducer';
+import { initialState, TodoState } from './types';
+import * as AC from './actions';
 
-type TodoWirteProps = {
-  setTodos: React.Dispatch<React.SetStateAction<TodoType[]>>;
-  handleTodoUpdate: (newTodo: TodoType) => void;
+// 오로지 state 를 읽기 전용으로 제공하는 Context
+const TodoStateContext = createContext<TodoState | null>(null);
+
+// 오로지 state 를 업데이트 하는 action 전용 Context
+type TodoActions = {
+  addTodo: (todos: TodoType) => void;
+  toggleTodo: (id: number) => void;
+  deleteTodo: (id: number) => void;
+  editTodo: (id: number, title: string) => void;
 };
-const TodoWirte = ({ setTodos, handleTodoUpdate }: TodoWirteProps) => {
-  // ts
+const TodoActionContext = createContext<TodoActions | null>(null);
+
+export const TodoProvider = ({ children }: React.PropsWithChildren): JSX.Element => {
+  const [state, dispatch] = useReducer(todosReducer, initialState);
+
+  // dispatch 전용 함수
+  const addTodo = useCallback((todo: TodoType) => dispatch(AC.addTodo(todo)), []);
+  const toggleTodo = useCallback((id: number) => dispatch(AC.toggleTodo(id)), []);
+  const deleteTodo = useCallback((id: number) => dispatch(AC.deleteTodo(id)), []);
+  const editTodo = useCallback((id: number, title: string) => dispatch(AC.editTodo(id, title)), []);
+
+  // Context 의 value 는 현재 {} 로 정의되어 있다.
+  const stateValue = useMemo(() => state, [state]);
+  const actionValue = useMemo(
+    () => ({
+      addTodo,
+      toggleTodo,
+      deleteTodo,
+      editTodo,
+    }),
+    [addTodo, toggleTodo, deleteTodo, editTodo],
+  );
+
+  return (
+    <TodoStateContext.Provider value={stateValue}>
+      <TodoActionContext.Provider value={actionValue}>{children}</TodoActionContext.Provider>
+    </TodoStateContext.Provider>
+  );
+};
+```
+
+### 4.5. 커스텀 훅 분리
+
+- /src/context/todo/hooks.ts
+
+```ts
+import { useContext } from 'react';
+import { TodoActionContext, TodoStateContext } from './TodoProvider';
+
+export function useTodoState() {
+  const state = useContext(TodoStateContext);
+  if (!state) {
+    throw new Error('state 가 없어요');
+  }
+  return state;
+}
+// 액션 전용 context 사용
+export function useTodoActions() {
+  const actions = useContext(TodoActionContext);
+  if (!actions) {
+    throw new Error('action 이 없어요');
+  }
+  return actions;
+}
+```
+
+### 4.6. 활용
+
+- App.tsx
+
+```tsx
+import TodoList from './components/todos/TodoList';
+import TodoWrite from './components/todos/TodoWrite';
+import { TodoProvider } from './context/todo/TodoProvider';
+
+function App(): JSX.Element {
+  // tsx 자리
+  return (
+    <TodoProvider>
+      <div>
+        <h1>할일 앱서비스</h1>
+        <div>
+          <TodoWrite />
+          <TodoList />
+        </div>
+      </div>
+    </TodoProvider>
+  );
+}
+
+export default App;
+```
+
+- TodoWrite.tsx
+
+```tsx
+import { ChangeEvent, KeyboardEvent, useState } from 'react';
+import { TodoType } from '../../types/todoType';
+import { useTodoActions } from '../../context/todo/hooks';
+
+const TodoWrite = () => {
+  // js 자리
+  const { addTodo } = useTodoActions();
   // 할일 제목 값 관리
   const [title, setTitle] = useState<string>('');
-
-  // 새 할일 등록하기
-
-  const handleAdd = () => {
-    // 공백 입력 금지하기
-    if (title.trim()) {
-      // {id: , title: "", completed:false}
-      const newTodo: TodoType = {
-        id: Date.now(), // 글자로 설정시에는 뒤에 .toString(), 붙이기
-        title: title,
-        completed: false,
-      };
-      // console.log(newTodo);
-      // 만약 setTodos 를 사용한다면?
-      // 아래는 prev : 현재 최신 state 를 나타냄
-      // 밑은 받은값을 제일 앞으로 처리
-      // setTodos(prev => [newTodo, ...prev]);
-      // 밑은 받은값을 제일 뒤로 처리
-      // setTodos(prev => [...prev, newTodo]);
-
-      // 함수의 매개변수로 전달한다면?
-      handleTodoUpdate(newTodo);
-      // 입력창에 글자 비워줌
-      setTitle('');
-    }
-  };
   // title 변경시 onChange 이벤트 처리해보기
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setTitle(e.target.value);
   };
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // enter 키를 입력시 처리
     if (e.key === 'Enter') {
       handleAdd();
     }
   };
 
-  // tsx
+  // 새 할일 등록하기
+  const handleAdd = () => {
+    if (title.trim()) {
+      const newTodo: TodoType = {
+        id: Date.now().toString(),
+        title: title,
+        completed: false,
+      };
+      addTodo(newTodo);
+      setTitle('');
+    }
+  };
+  // jsx 자리
   return (
     <div>
       <input type="text" value={title} onChange={e => handleChange(e)} onKeyDown={handleKeyDown} />
@@ -528,22 +691,125 @@ const TodoWirte = ({ setTodos, handleTodoUpdate }: TodoWirteProps) => {
   );
 };
 
-export default TodoWirte;
+export default TodoWrite;
 ```
 
-- /src/types/todoType.ts
+- TodoList.tsx
 
-```ts
-// 1. type
-export type TodoType = {
-  id: number;
-  title: string;
-  completed: boolean;
+```tsx
+import { useTodosState } from '../../context/todo/hooks';
+import TodoItem from './TodoItem';
+
+const TodoList = (): JSX.Element => {
+  const { todos } = useTodosState();
+  return (
+    <div>
+      <h2>할일목록</h2>
+      {todos.length === 0 ? (
+        <p>목록이 없습니다.</p>
+      ) : (
+        <ul>
+          {todos.map(item => (
+            <TodoItem key={item.id} todo={item} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 };
-// 2. interface
-export interface ITodoType {
-  id: number;
-  title: string;
-  completed: boolean;
-}
+
+export default TodoList;
+```
+
+- TodoItem.tsx
+
+```tsx
+import { TodoType } from '../../types/todoType';
+import React, { KeyboardEvent, useState } from 'react';
+import { useTodoActions } from '../../context/todo/hooks';
+
+type TodoItemProps = {
+  todo: TodoType;
+};
+
+const TodoItem = ({ todo }: TodoItemProps) => {
+  // js 자리
+  const { toggleTodo, deleteTodo, editTodo } = useTodoActions();
+
+  // 현재 Edit 상태인지 아닌지 관리
+  const [isEdit, setIsEdit] = useState<boolean>(false);
+  // Edit 상태라면 입력중인 title 내용 관리
+  const [editTitle, setEditTitle] = useState<string>(todo.title);
+
+  // 수정은 별도의 입력창 구성으로 수정 후 값 만 업데이트
+  const handleEdit = () => {
+    // console.log('여기에서 내용을 수정하는 기능 작성 후 완료된 데이터 전송');
+    // isEdit 을 true 로 변경
+    setIsEdit(true);
+  };
+
+  const hanldeKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    //console.log(e.key);
+    if (e.key === 'Enter') {
+      handleEditSave();
+    }
+    if (e.key === 'Escape') {
+      handleEditCancel();
+    }
+  };
+  // 수정 후 저장 기능
+  const handleEditSave = () => {
+    // console.log('수정완료 저장');
+    // 1. 업데이트 해줌. (진행예정)
+    if (editTitle.trim()) {
+      // 변경되어야 할 iD, 새로운 타이틀 전달
+      editTodo(todo.id, editTitle);
+      // 2. 상태는 isEdit 을 false 로 변경
+      setIsEdit(false);
+    }
+  };
+  // 수정 취소 기능
+  const handleEditCancel = () => {
+    // 1. editTitle 을 원래대로 돌리고
+    setEditTitle(todo.title);
+    // 2. isEdit 을 false 로 설정하고
+    setIsEdit(false);
+  };
+
+  // CSS 객체 만들기
+  const liStyle: React.CSSProperties = {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: todo.completed ? 'gray' : 'red',
+    textDecoration: todo.completed ? 'line-through' : 'none',
+  };
+
+  return (
+    <li style={liStyle}>
+      {isEdit ? (
+        <>
+          <input
+            type="text"
+            value={editTitle}
+            onChange={e => setEditTitle(e.target.value)}
+            onKeyDown={hanldeKeyDown}
+          />
+          <button onClick={handleEditSave}>저장</button>
+          <button onClick={handleEditCancel}>취소</button>
+        </>
+      ) : (
+        <>
+          <input type="checkbox" onChange={() => toggleTodo(todo.id)} checked={todo.completed} />
+          <span>{todo.title}</span>
+          <button onClick={handleEdit}>수정</button>
+          <button onClick={() => deleteTodo(todo.id)}>삭제</button>
+        </>
+      )}
+    </li>
+  );
+};
+
+export default TodoItem;
 ```
