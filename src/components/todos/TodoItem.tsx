@@ -1,6 +1,5 @@
 import { TodoType } from '@/types/todoType';
-import React, { KeyboardEvent, useState } from 'react';
-import { useTodoActions } from '../../context/todo/hooks';
+import { KeyboardEvent, useState } from 'react';
 import { useTodos } from '../../context/TodoContext';
 
 type TodoItemProps = {

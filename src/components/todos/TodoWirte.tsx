@@ -1,7 +1,6 @@
-import { useTodoActions } from '../../context/todo/hooks';
 import { ChangeEvent, KeyboardEvent, useState } from 'react';
-import { TodoType } from '../../types/todoType';
 import { useTodos } from '../../context/TodoContext';
+import { TodoType } from '../../types/todoType';
 
 const TodoWrite = () => {
   // js 자리
